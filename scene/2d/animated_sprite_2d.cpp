@@ -104,10 +104,7 @@ Rect2 AnimatedSprite2D::_get_rect() const {
 	}
 	Size2 s = t->get_size();
 
-	Point2 ofs = offset;
-	if (centered) {
-		ofs -= s / 2;
-	}
+	Point2 ofs = offset - s * pivotOffset;
 
 	if (s == Size2(0, 0)) {
 		s = Size2(1, 1);
@@ -299,10 +296,7 @@ void AnimatedSprite2D::_notification(int p_what) {
 			RID ci = get_canvas_item();
 
 			Size2 s = texture->get_size();
-			Point2 ofs = offset;
-			if (centered) {
-				ofs -= s / 2;
-			}
+			Point2 ofs = offset - s * pivotOffset;
 
 			if (get_viewport() && get_viewport()->is_snap_2d_transforms_to_pixel_enabled()) {
 				ofs = (ofs + Point2(0.5, 0.5)).floor();
@@ -418,18 +412,18 @@ float AnimatedSprite2D::get_playing_speed() const {
 	return speed_scale * custom_speed_scale;
 }
 
-void AnimatedSprite2D::set_centered(bool p_center) {
-	if (centered == p_center) {
+void AnimatedSprite2D::set_pivot_offset(Point2 p_pivot_offset) {
+	if (pivotOffset == p_pivot_offset) {
 		return;
 	}
 
-	centered = p_center;
+	pivotOffset = p_pivot_offset;
 	queue_redraw();
 	item_rect_changed();
 }
 
-bool AnimatedSprite2D::is_centered() const {
-	return centered;
+Point2 AnimatedSprite2D::get_pivot_offset() const {
+	return pivotOffset;
 }
 
 void AnimatedSprite2D::set_offset(const Point2 &p_offset) {
@@ -658,8 +652,8 @@ void AnimatedSprite2D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("pause"), &AnimatedSprite2D::pause);
 	ClassDB::bind_method(D_METHOD("stop"), &AnimatedSprite2D::stop);
 
-	ClassDB::bind_method(D_METHOD("set_centered", "centered"), &AnimatedSprite2D::set_centered);
-	ClassDB::bind_method(D_METHOD("is_centered"), &AnimatedSprite2D::is_centered);
+	ClassDB::bind_method(D_METHOD("set_pivot_offset", "pivot_offset"), &AnimatedSprite2D::set_pivot_offset);
+	ClassDB::bind_method(D_METHOD("get_pivot_offset"), &AnimatedSprite2D::get_pivot_offset);
 
 	ClassDB::bind_method(D_METHOD("set_offset", "offset"), &AnimatedSprite2D::set_offset);
 	ClassDB::bind_method(D_METHOD("get_offset"), &AnimatedSprite2D::get_offset);

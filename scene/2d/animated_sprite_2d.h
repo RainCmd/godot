@@ -45,8 +45,8 @@ class AnimatedSprite2D : public Node2D {
 	float speed_scale = 1.0;
 	float custom_speed_scale = 1.0;
 
-	bool centered = true;
 	Point2 offset;
+	Point2 pivotOffset;
 
 	real_t frame_speed_scale = 1.0;
 	real_t frame_progress = 0.0;
@@ -115,8 +115,8 @@ public:
 	float get_speed_scale() const;
 	float get_playing_speed() const;
 
-	void set_centered(bool p_center);
-	bool is_centered() const;
+	void set_pivot_offset(Point2 p_pivot_offset);
+	Point2 get_pivot_offset() const;
 
 	void set_offset(const Point2 &p_offset);
 	Point2 get_offset() const;
