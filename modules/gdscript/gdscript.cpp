@@ -170,7 +170,7 @@ GDScriptInstance *GDScript::_create_instance(const Variant **p_args, int p_argco
 	/* STEP 2, INITIALIZE AND CONSTRUCT */
 	{
 		MutexLock lock(GDScriptLanguage::singleton->mutex);
-		instances.insert(instance->owner);
+		instances.add(&instance->script_instance_list);
 	}
 
 	_super_implicit_constructor(this, instance, r_error);
@@ -180,7 +180,7 @@ GDScriptInstance *GDScript::_create_instance(const Variant **p_args, int p_argco
 		instance->owner->set_script_instance(nullptr);
 		{
 			MutexLock lock(GDScriptLanguage::singleton->mutex);
-			instances.erase(p_owner);
+			instances.remove(&instance->script_instance_list);
 		}
 		ERR_FAIL_V_MSG(nullptr, "Error constructing a GDScriptInstance: " + error_text);
 	}
@@ -198,7 +198,7 @@ GDScriptInstance *GDScript::_create_instance(const Variant **p_args, int p_argco
 			instance->owner->set_script_instance(nullptr);
 			{
 				MutexLock lock(GDScriptLanguage::singleton->mutex);
-				instances.erase(p_owner);
+				instances.remove(&instance->script_instance_list);
 			}
 			ERR_FAIL_V_MSG(nullptr, "Error constructing a GDScriptInstance: " + error_text);
 		}
@@ -433,12 +433,6 @@ PlaceHolderScriptInstance *GDScript::placeholder_instance_create(Object *p_this)
 #else
 	return nullptr;
 #endif
-}
-
-bool GDScript::instance_has(const Object *p_this) const {
-	MutexLock lock(GDScriptLanguage::singleton->mutex);
-
-	return instances.has((Object *)p_this);
 }
 
 bool GDScript::has_source_code() const {
@@ -750,7 +744,7 @@ Error GDScript::reload(bool p_keep_state) {
 	{
 		MutexLock lock(GDScriptLanguage::singleton->mutex);
 
-		has_instances = instances.size();
+		has_instances = instances.first() != nullptr;
 	}
 
 	// Check condition but reset flag before early return
@@ -1747,9 +1741,48 @@ void GDScriptInstance::get_property_list(List<PropertyInfo> *p_properties) const
 				Callable::CallError err;
 				Variant ret = E->value->call(const_cast<GDScriptInstance *>(this), nullptr, 0, err);
 				if (err.error == Callable::CallError::CALL_OK) {
-					ERR_FAIL_COND_MSG(ret.get_type() != Variant::ARRAY, "Wrong type for _get_property_list, must be an array of dictionaries.");
+					// GH-118877. We decided to make an exception to maintain compatibility, since the problem can only be detected at runtime.
+#ifdef DISABLE_DEPRECATED
+					ERR_FAIL_COND_MSG(ret.get_type() != Variant::ARRAY, R"*(Wrong type for "_get_property_list()", must be "Array[Dictionary]".)*");
+#else // !DISABLE_DEPRECATED
+					ERR_FAIL_COND_MSG(ret.get_type() != Variant::ARRAY, R"*(Wrong type for "_get_property_list()", must be an array of dictionaries.)*");
+#endif // DISABLE_DEPRECATED
 
 					Array arr = ret;
+
+					// GH-118877. We decided to make an exception to maintain compatibility, since the problem can only be detected at runtime.
+#ifdef DISABLE_DEPRECATED
+					ERR_FAIL_COND_MSG(arr.get_typed_builtin() != Variant::DICTIONARY, R"*(Wrong type for "_get_property_list()", must be "Array[Dictionary]".)*");
+#else // !DISABLE_DEPRECATED
+#ifdef DEBUG_ENABLED
+					if (arr.get_typed_builtin() != Variant::DICTIONARY) {
+						static bool error_shown = false;
+						if (unlikely(!error_shown)) {
+							error_shown = true;
+
+							String elem_type;
+							if (arr.is_typed()) {
+								const Ref<Script> script_type = arr.get_typed_script();
+								if (script_type.is_valid() && script_type->is_valid()) {
+									elem_type = GDScript::debug_get_script_name(script_type);
+								} else if (!arr.get_typed_class_name().is_empty()) {
+									elem_type = arr.get_typed_class_name();
+								} else {
+									elem_type = Variant::get_type_name((Variant::Type)arr.get_typed_builtin());
+								}
+								elem_type = vformat("[%s]", elem_type);
+							}
+
+							String msg = vformat(R"*("_get_property_list()" should return "Array[Dictionary]", not "Array%s".)*", elem_type);
+							msg += " The old behavior is supported for compatibility and may be removed in the future.";
+							msg += " This message is printed once and will not be repeated for similar errors.";
+
+							ERR_PRINT(msg);
+						}
+					}
+#endif // DEBUG_ENABLED
+#endif // DISABLE_DEPRECATED
+
 					for (int i = 0; i < arr.size(); i++) {
 						Dictionary d = arr[i];
 						ERR_CONTINUE(!d.has("name"));
@@ -2045,8 +2078,8 @@ GDScriptInstance::~GDScriptInstance() {
 		}
 	}
 
-	if (script.is_valid() && owner) {
-		script->instances.erase(owner);
+	if (script.is_valid()) {
+		script->instances.remove(&script_instance_list);
 	}
 }
 
@@ -2472,15 +2505,13 @@ void GDScriptLanguage::reload_scripts(const Array &p_scripts, bool p_soft_reload
 			//save state and remove script from instances
 			HashMap<ObjectID, List<Pair<StringName, Variant>>> &map = to_reload[scr];
 
-			while (scr->instances.front()) {
-				Object *obj = scr->instances.front()->get();
+			while (scr->instances.first()) {
+				GDScriptInstance *instance = scr->instances.first()->self();
 				//save instance info
 				List<Pair<StringName, Variant>> state;
-				if (obj->get_script_instance()) {
-					obj->get_script_instance()->get_property_state(state);
-					map[obj->get_instance_id()] = state;
-					obj->set_script(Variant());
-				}
+				instance->get_property_state(state);
+				map[instance->get_owner()->get_instance_id()] = state;
+				instance->get_owner()->set_script(Variant());
 			}
 
 			//same thing for placeholders

@@ -186,9 +186,7 @@ void Node::_notification(int p_notification) {
 		} break;
 
 		case NOTIFICATION_POST_ENTER_TREE: {
-			if (data.auto_translate_mode != AUTO_TRANSLATE_MODE_DISABLED) {
-				notification(NOTIFICATION_TRANSLATION_CHANGED);
-			}
+			notification(NOTIFICATION_TRANSLATION_CHANGED);
 		} break;
 
 		case NOTIFICATION_EXIT_TREE: {
@@ -3241,16 +3239,14 @@ void Node::replace_by(RequiredParam<Node> rp_node, bool p_keep_groups) {
 
 	emit_signal(SNAME("replacing_by"), p_node);
 
-	while (get_child_count()) {
-		Node *child = get_child(0);
+	// Move non-internal children to `p_node`.
+	while (get_child_count(false)) {
+		Node *child = get_child(0, false);
 		remove_child(child);
-		if (!child->is_internal()) {
-			// Add the custom children to the p_node.
-			Node *child_owner = child->get_owner() == this ? p_node : child->get_owner();
-			child->set_owner(nullptr);
-			p_node->add_child(child);
-			child->set_owner(child_owner);
-		}
+		Node *child_owner = child->get_owner() == this ? p_node : child->get_owner();
+		child->set_owner(nullptr);
+		p_node->add_child(child);
+		child->set_owner(child_owner);
 	}
 
 	p_node->set_owner(owner);
@@ -3726,6 +3722,14 @@ RID Node::get_focused_accessibility_element() const {
 		return id;
 	} else {
 		return get_accessibility_element();
+	}
+}
+
+Transform2D Node::get_accessibility_transform() const {
+	if (is_inside_tree() && data.parent) {
+		return data.parent->get_accessibility_transform();
+	} else {
+		return Transform2D();
 	}
 }
 

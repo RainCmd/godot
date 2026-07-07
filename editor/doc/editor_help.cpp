@@ -906,7 +906,7 @@ void EditorHelp::_update_method_descriptions(const DocData::ClassDoc &p_classdoc
 
 				class_desc->add_text(TTR("Error codes returned:"));
 				class_desc->add_newline();
-				class_desc->push_list(0, RichTextLabel::LIST_DOTS, false);
+				class_desc->push_list(1, RichTextLabel::LIST_DOTS, false);
 				for (int j = 0; j < method.errors_returned.size(); j++) {
 					if (j > 0) {
 						class_desc->add_newline();
@@ -2903,7 +2903,7 @@ static void _add_text_to_rt(const String &p_bbcode, RichTextLabel *p_rt, const C
 			}
 
 			String image_path = bbcode.substr(brk_end + 1, end - brk_end - 1);
-			p_rt->add_image(ResourceLoader::load(image_path, "Texture2D"), width, height, Color(1, 1, 1), INLINE_ALIGNMENT_CENTER, Rect2(), Variant(), false, String(), size_in_percent);
+			p_rt->add_image(ResourceLoader::load(image_path, "Texture2D"), width, height, Color(1, 1, 1), INLINE_ALIGNMENT_CENTER, Rect2(), Variant(), false, String(), size_in_percent ? RichTextLabel::IMAGE_UNIT_PERCENT : RichTextLabel::IMAGE_UNIT_PIXEL);
 
 			pos = end;
 			tag_stack.push_front("img");

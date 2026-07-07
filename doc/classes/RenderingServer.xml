@@ -18,6 +18,15 @@
 		<link title="Optimization using Servers">$DOCS_URL/tutorials/performance/using_servers.html</link>
 	</tutorials>
 	<methods>
+		<method name="area_light_create">
+			<return type="RID" />
+			<description>
+				Creates a new area light and adds it to the RenderingServer. It can be accessed with the RID that is returned. This RID can be used in most [code]light_*[/code] RenderingServer functions.
+				Once finished with your RID, you will want to free the RID using the RenderingServer's [method free_rid] method.
+				To place in a scene, attach this area light to an instance using [method instance_set_base] using the returned RID.
+				[b]Note:[/b] The equivalent node is [AreaLight3D].
+			</description>
+		</method>
 		<method name="bake_render_uv2">
 			<return type="Image[]" />
 			<param index="0" name="base" type="RID" />
@@ -1545,7 +1554,7 @@
 			<param index="5" name="emission_energy" type="float" />
 			<param index="6" name="anisotropy" type="float" />
 			<param index="7" name="length" type="float" />
-			<param index="8" name="p_detail_spread" type="float" />
+			<param index="8" name="detail_spread" type="float" />
 			<param index="9" name="gi_inject" type="float" />
 			<param index="10" name="temporal_reprojection" type="bool" />
 			<param index="11" name="temporal_reprojection_amount" type="float" />
@@ -2102,6 +2111,22 @@
 			<return type="bool" />
 			<description>
 				Returns [code]true[/code] if our code is currently executing on the rendering thread.
+			</description>
+		</method>
+		<method name="light_area_set_normalize_energy">
+			<return type="void" />
+			<param index="0" name="light" type="RID" />
+			<param index="1" name="enable" type="bool" />
+			<description>
+				Defines whether the energy of an [AreaLight3D] is normalized (divided) by its area. If set to [code]true[/code], changing the size does not affect the total energy output. Equivalent to [member AreaLight3D.area_normalize_energy].
+			</description>
+		</method>
+		<method name="light_area_set_size">
+			<return type="void" />
+			<param index="0" name="light" type="RID" />
+			<param index="1" name="size" type="Vector2" />
+			<description>
+				Sets the extents (width and height) in meters for this area light. Equivalent to [member AreaLight3D.area_size].
 			</description>
 		</method>
 		<method name="light_directional_set_blend_splits">
@@ -3331,7 +3356,7 @@
 		<method name="particles_set_transform_align_axis">
 			<return type="void" />
 			<param index="0" name="particles" type="RID" />
-			<param index="1" name="p_rotation_axis" type="int" enum="RenderingServer.ParticlesTransformAlignAxis" />
+			<param index="1" name="rotation_axis" type="int" enum="RenderingServer.ParticlesTransformAlignAxis" />
 			<description>
 				Sets which axis to use for transform alignment.
 			</description>
@@ -4406,6 +4431,7 @@
 			<description>
 				Affects the final texture sharpness by reading from a lower or higher mipmap (also called "texture LOD bias"). Negative values make mipmapped textures sharper but grainier when viewed at a distance, while positive values make mipmapped textures blurrier (even when up close). To get sharper textures at a distance without introducing too much graininess, set this between [code]-0.75[/code] and [code]0.0[/code]. Enabling temporal antialiasing ([member ProjectSettings.rendering/anti_aliasing/quality/use_taa]) can help reduce the graininess visible when using negative mipmap bias.
 				[b]Note:[/b] When the 3D scaling mode is set to FSR 1.0, this value is used to adjust the automatic mipmap bias which is calculated internally based on the scale factor. The formula for this is [code]-log2(1.0 / scale) + mipmap_bias[/code].
+				[b]Note:[/b] This method is only supported in the Forward+ and Mobile renderers, not Compatibility. In Compatibility, this method is always treated as if [param mipmap_bias] was set to [code]0.0[/code].
 			</description>
 		</method>
 		<method name="viewport_set_transparent_background">
@@ -5008,6 +5034,9 @@
 		</constant>
 		<constant name="LIGHT_SPOT" value="2" enum="LightType">
 			Spot light (see [SpotLight3D]).
+		</constant>
+		<constant name="LIGHT_AREA" value="3" enum="LightType">
+			Area light (see [AreaLight3D]).
 		</constant>
 		<constant name="LIGHT_PARAM_ENERGY" value="0" enum="LightParam">
 			The light's energy multiplier.

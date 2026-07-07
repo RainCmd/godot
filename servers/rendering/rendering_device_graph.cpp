@@ -813,7 +813,7 @@ void RenderingDeviceGraph::_run_raytracing_list_command(RDD::CommandBufferID p_c
 			} break;
 			case RaytracingListInstruction::TYPE_TRACE_RAYS: {
 				const RaytracingListTraceRaysInstruction *trace_rays_instruction = reinterpret_cast<const RaytracingListTraceRaysInstruction *>(instruction);
-				driver->command_trace_rays(p_command_buffer, trace_rays_instruction->width, trace_rays_instruction->height);
+				driver->command_trace_rays(p_command_buffer, trace_rays_instruction->raygen_sbt, trace_rays_instruction->miss_sbt, trace_rays_instruction->hit_sbt, trace_rays_instruction->width, trace_rays_instruction->height, trace_rays_instruction->depth);
 				instruction_data_cursor += sizeof(RaytracingListTraceRaysInstruction);
 			} break;
 			case RaytracingListInstruction::TYPE_SET_PUSH_CONSTANT: {
@@ -1117,7 +1117,7 @@ void RenderingDeviceGraph::_run_render_commands(int32_t p_level, const RecordedC
 				_run_raytracing_list_command(r_command_buffer, raytracing_list_command->instruction_data(), raytracing_list_command->instruction_data_size);
 			} break;
 			case RecordedCommand::TYPE_COMPUTE_LIST: {
-				if (device.workarounds.avoid_compute_after_draw && workarounds_state.draw_list_found) {
+				if (driver_workarounds.avoid_compute_after_draw && workarounds_state.draw_list_found) {
 					// Avoid compute after draw workaround. Refer to the comment that enables this in the Vulkan driver for more information.
 					workarounds_state.draw_list_found = false;
 
@@ -1141,7 +1141,7 @@ void RenderingDeviceGraph::_run_render_commands(int32_t p_level, const RecordedC
 				_run_compute_list_command(r_command_buffer, compute_list_command->instruction_data(), compute_list_command->instruction_data_size);
 			} break;
 			case RecordedCommand::TYPE_DRAW_LIST: {
-				if (device.workarounds.avoid_compute_after_draw) {
+				if (driver_workarounds.avoid_compute_after_draw) {
 					// Indicate that a draw list was encountered for the workaround.
 					workarounds_state.draw_list_found = true;
 				}
@@ -1712,13 +1712,13 @@ void RenderingDeviceGraph::_print_compute_list(const uint8_t *p_instruction_data
 	}
 }
 
-void RenderingDeviceGraph::initialize(RDD *p_driver, RenderingContextDriver::Device p_device, RenderPassCreationFunction p_render_pass_creation_function, uint32_t p_frame_count, RDD::CommandQueueFamilyID p_secondary_command_queue_family, uint32_t p_secondary_command_buffers_per_frame) {
+void RenderingDeviceGraph::initialize(RDD *p_driver, RenderPassCreationFunction p_render_pass_creation_function, uint32_t p_frame_count, RDD::CommandQueueFamilyID p_secondary_command_queue_family, uint32_t p_secondary_command_buffers_per_frame) {
 	DEV_ASSERT(p_driver != nullptr);
 	DEV_ASSERT(p_render_pass_creation_function != nullptr);
 	DEV_ASSERT(p_frame_count > 0);
 
 	driver = p_driver;
-	device = p_device;
+	driver_workarounds = p_driver->get_driver_workarounds();
 	render_pass_creation_function = p_render_pass_creation_function;
 	frames.resize(p_frame_count);
 
@@ -1959,11 +1959,15 @@ void RenderingDeviceGraph::add_raytracing_list_set_push_constant(RDD::ShaderID p
 	memcpy(instruction->data(), p_data, p_data_size);
 }
 
-void RenderingDeviceGraph::add_raytracing_list_trace_rays(uint32_t p_width, uint32_t p_height) {
+void RenderingDeviceGraph::add_raytracing_list_trace_rays(const RDD::ShaderBindingTable &p_raygen_sbt, const RDD::ShaderBindingTable &p_miss_sbt, const RDD::ShaderBindingTable &p_hit_sbt, uint32_t p_width, uint32_t p_height, uint32_t p_depth) {
 	RaytracingListTraceRaysInstruction *instruction = reinterpret_cast<RaytracingListTraceRaysInstruction *>(_allocate_raytracing_list_instruction(sizeof(RaytracingListTraceRaysInstruction)));
 	instruction->type = RaytracingListInstruction::TYPE_TRACE_RAYS;
+	instruction->raygen_sbt = p_raygen_sbt;
+	instruction->miss_sbt = p_miss_sbt;
+	instruction->hit_sbt = p_hit_sbt;
 	instruction->width = p_width;
 	instruction->height = p_height;
+	instruction->depth = p_depth;
 }
 
 void RenderingDeviceGraph::add_raytracing_list_uniform_set_prepare_for_use(RDD::ShaderID p_shader, RDD::UniformSetID p_uniform_set, uint32_t set_index) {
@@ -2639,13 +2643,16 @@ void RenderingDeviceGraph::end(bool p_reorder_commands, bool p_full_barriers, RD
 		}
 
 		// Batch buffer, texture, draw lists and compute operations together.
-		const uint32_t PriorityTable[RecordedCommand::TYPE_MAX] = {
+		const uint32_t PriorityTable[] = {
 			0, // TYPE_NONE
+			6, // TYPE_BOTTOM_LEVEL_ACCELERATION_STRUCTURE_BUILD
+			6, // TYPE_TOP_LEVEL_ACCELERATION_STRUCTURE_BUILD
 			1, // TYPE_BUFFER_CLEAR
 			1, // TYPE_BUFFER_COPY
 			1, // TYPE_BUFFER_GET_DATA
 			1, // TYPE_BUFFER_UPDATE
 			4, // TYPE_COMPUTE_LIST
+			7, // TYPE_RAYTRACING_LIST
 			3, // TYPE_DRAW_LIST
 			2, // TYPE_TEXTURE_CLEAR_COLOR
 			2, // TYPE_TEXTURE_CLEAR_DEPTH_STENCIL
@@ -2656,6 +2663,7 @@ void RenderingDeviceGraph::end(bool p_reorder_commands, bool p_full_barriers, RD
 			2, // TYPE_CAPTURE_TIMESTAMP
 			5, // TYPE_DRIVER_CALLBACK
 		};
+		static_assert(std_size(PriorityTable) == RecordedCommand::TYPE_MAX, "PriorityTable must have one entry per RecordedCommand::Type");
 
 		commands_sorted.clear();
 		commands_sorted.resize(command_count);
@@ -2695,7 +2703,7 @@ void RenderingDeviceGraph::end(bool p_reorder_commands, bool p_full_barriers, RD
 		int32_t current_label_level = -1;
 		_run_label_command_change(r_command_buffer, -1, -1, true, true, nullptr, 0, current_label_index, current_label_level);
 
-		if (device.workarounds.avoid_compute_after_draw) {
+		if (driver_workarounds.avoid_compute_after_draw) {
 			// Reset the state of the workaround.
 			workarounds_state.draw_list_found = false;
 		}
