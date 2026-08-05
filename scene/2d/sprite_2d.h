@@ -42,7 +42,7 @@ class Sprite2D : public Node2D {
 	bool dragging_to_resize_rect = false;
 #endif // TOOLS_ENABLED
 
-	bool centered = true;
+	Point2 pivot_offset;
 	Point2 offset;
 
 	bool hflip = false;
@@ -99,8 +99,8 @@ public:
 	void set_texture(const Ref<Texture2D> &p_texture);
 	Ref<Texture2D> get_texture() const;
 
-	void set_centered(bool p_center);
-	bool is_centered() const;
+	void set_pivot_offset(const Point2 &p_pivot_offset);
+	Point2 get_pivot_offset() const;
 
 	void set_offset(const Point2 &p_offset);
 	Point2 get_offset() const;

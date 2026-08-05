@@ -71,7 +71,7 @@ void Sprite2D::_edit_set_rect(const Rect2 &p_rect) {
 		Node2D::_edit_set_rect(p_rect);
 		return;
 	}
-	Point2 delta = p_rect.position - (centered ? _get_rect_offset(p_rect.size) : Vector2());
+	Point2 delta = p_rect.position - _get_rect_offset(p_rect.size);
 	set_region_rect(Rect2(region_rect.position, p_rect.size));
 	set_position(get_position() + get_transform().basis_xform(delta));
 }
@@ -113,10 +113,7 @@ void Sprite2D::_get_rects(Rect2 &r_src_rect, Rect2 &r_dst_rect, bool &r_filter_c
 	r_src_rect.size = frame_size;
 	r_src_rect.position = base_rect.position + frame_offset;
 
-	Point2 dest_offset = offset;
-	if (centered) {
-		dest_offset -= frame_size / 2;
-	}
+	Point2 dest_offset = offset - frame_size * pivot_offset;
 
 	if (get_viewport() && get_viewport()->is_snap_2d_transforms_to_pixel_enabled()) {
 		dest_offset = (dest_offset + Point2(0.5, 0.5)).floor();
@@ -133,10 +130,7 @@ void Sprite2D::_get_rects(Rect2 &r_src_rect, Rect2 &r_dst_rect, bool &r_filter_c
 }
 
 Point2 Sprite2D::_get_rect_offset(const Size2i &p_size) const {
-	Point2 ofs = offset;
-	if (centered) {
-		ofs -= Size2(p_size) / 2;
-	}
+	Point2 ofs = offset - Size2(p_size) * pivot_offset;
 
 	if (get_viewport() && get_viewport()->is_snap_2d_transforms_to_pixel_enabled()) {
 		ofs = (ofs + Point2(0.5, 0.5)).floor();
@@ -198,18 +192,18 @@ Ref<Texture2D> Sprite2D::get_texture() const {
 	return texture;
 }
 
-void Sprite2D::set_centered(bool p_center) {
-	if (centered == p_center) {
+void Sprite2D::set_pivot_offset(const Point2 &p_pivot_offset) {
+	if (offset == p_pivot_offset) {
 		return;
 	}
 
-	centered = p_center;
+	pivot_offset = p_pivot_offset;
 	queue_redraw();
 	item_rect_changed();
 }
 
-bool Sprite2D::is_centered() const {
-	return centered;
+Point2 Sprite2D::get_pivot_offset() const {
+	return pivot_offset;
 }
 
 void Sprite2D::set_offset(const Point2 &p_offset) {
@@ -494,8 +488,8 @@ void Sprite2D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_texture", "texture"), &Sprite2D::set_texture);
 	ClassDB::bind_method(D_METHOD("get_texture"), &Sprite2D::get_texture);
 
-	ClassDB::bind_method(D_METHOD("set_centered", "centered"), &Sprite2D::set_centered);
-	ClassDB::bind_method(D_METHOD("is_centered"), &Sprite2D::is_centered);
+	ClassDB::bind_method(D_METHOD("set_pivot_offset", "pivot_offset"), &Sprite2D::set_pivot_offset);
+	ClassDB::bind_method(D_METHOD("get_pivot_offset"), &Sprite2D::get_pivot_offset);
 
 	ClassDB::bind_method(D_METHOD("set_offset", "offset"), &Sprite2D::set_offset);
 	ClassDB::bind_method(D_METHOD("get_offset"), &Sprite2D::get_offset);
@@ -536,7 +530,7 @@ void Sprite2D::_bind_methods() {
 
 	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "texture", PROPERTY_HINT_RESOURCE_TYPE, Texture2D::get_class_static()), "set_texture", "get_texture");
 	ADD_GROUP("Offset", "");
-	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "centered"), "set_centered", "is_centered");
+	ADD_PROPERTY(PropertyInfo(Variant::VECTOR2, "pivot_offset", PROPERTY_HINT_NONE, ""), "set_pivot_offset", "get_pivot_offset");
 	ADD_PROPERTY(PropertyInfo(Variant::VECTOR2, "offset", PROPERTY_HINT_NONE, "suffix:px"), "set_offset", "get_offset");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "flip_h"), "set_flip_h", "is_flipped_h");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "flip_v"), "set_flip_v", "is_flipped_v");
